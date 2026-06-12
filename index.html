@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Jaca RA — Caza de hitos históricos</title>
+
+  <!-- Tipografía del título (estilo inscripción romana) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap" rel="stylesheet" />
+
+  <!-- Leaflet: la librería del mapa -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* ============ Paleta del juego ============
+       piedra:    #2B2823  (texto, bordes)
+       pergamino: #F5EFE3  (paneles)
+       oro:       #C9972B  (hitos descubiertos, ajedrezado)
+       pino:      #2F5D50  (acción principal)
+       arena:     #8A8174  (texto secundario)             */
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: #2B2823;
+      background: #F5EFE3;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---------- Cabecera ---------- */
+    header {
+      background: #2B2823;
+      color: #F5EFE3;
+      padding: 10px 14px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    header h1 {
+      font-family: "Marcellus", serif;
+      font-weight: 400;
+      font-size: 1.35rem;
+      letter-spacing: 0.12em;
+    }
+
+    header h1 span { color: #C9972B; }
+
+    .progreso-texto {
+      font-size: 0.85rem;
+      color: #C9972B;
+      white-space: nowrap;
+    }
+
+    .boton-reinicio {
+      background: none;
+      border: 1px solid #8A8174;
+      color: #F5EFE3;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    /* ---------- Barra de progreso con "ajedrezado jaqués" ----------
+       El damero tallado en la catedral de Jaca, convertido en barra
+       de progreso: se va rellenando de oro hito a hito.            */
+    .ajedrezado {
+      height: 12px;
+      background:
+        conic-gradient(#3A362F 90deg, #2B2823 90deg 180deg,
+                       #2B2823 180deg 270deg, #3A362F 270deg)
+        0 0 / 12px 12px;
+    }
+
+    .ajedrezado-relleno {
+      height: 100%;
+      width: 0%;
+      transition: width 0.6s ease;
+      background:
+        conic-gradient(#C9972B 90deg, #9C711C 90deg 180deg,
+                       #9C711C 180deg 270deg, #C9972B 270deg)
+        0 0 / 12px 12px;
+    }
+
+    /* ---------- Mapa ---------- */
+    #mapa { flex: 1; width: 100%; }
+
+    /* Pin de hito (icono personalizado de Leaflet) */
+    .pin {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #F5EFE3;
+      border: 2.5px solid #2B2823;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    }
+
+    .pin.logrado {
+      background: #C9972B;
+      border-color: #7A5712;
+    }
+
+    /* Punto azul del jugador */
+    .yo {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #2A6BD4;
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 0 rgba(42, 107, 212, 0.45);
+      animation: pulso 2s infinite;
+    }
+
+    @keyframes pulso {
+      70% { box-shadow: 0 0 0 16px rgba(42, 107, 212, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(42, 107, 212, 0); }
+    }
+
+    /* ---------- Aviso de modo prueba ---------- */
+    .aviso-prueba {
+      background: #C9972B;
+      color: #2B2823;
+      text-align: center;
+      font-size: 0.78rem;
+      padding: 4px 8px;
+      display: none;
+    }
+
+    /* ---------- Tarjeta inferior ---------- */
+    .tarjeta {
+      position: relative;
+      background: #F5EFE3;
+      border-top: 2px solid #2B2823;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      min-height: 86px;
+    }
+
+    .tarjeta .titulo-hito {
+      font-family: "Marcellus", serif;
+      font-size: 1.05rem;
+    }
+
+    .tarjeta .detalle {
+      color: #8A8174;
+      font-size: 0.85rem;
+      margin-top: 2px;
+    }
+
+    .boton-ra {
+      display: none;
+      width: 100%;
+      margin-top: 10px;
+      background: #2F5D50;
+      color: #F5EFE3;
+      text-align: center;
+      text-decoration: none;
+      font-size: 1.05rem;
+      font-weight: 600;
+      padding: 13px;
+      border-radius: 10px;
+    }
+
+    .boton-ra:active { background: #244a3f; }
+
+    /* Botón flotante para centrar el mapa en tu posición */
+    .boton-centrar {
+      position: absolute;
+      right: 14px;
+      top: -58px;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 2px solid #2B2823;
+      background: #F5EFE3;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    a:focus-visible, button:focus-visible {
+      outline: 3px solid #C9972B;
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>JACA <span>RA</span></h1>
+    <div class="progreso-texto" id="progresoTexto">0/5 hitos</div>
+    <button class="boton-reinicio" id="botonReinicio">Reiniciar</button>
+  </header>
+
+  <div class="ajedrezado"><div class="ajedrezado-relleno" id="barraProgreso"></div></div>
+  <div class="aviso-prueba" id="avisoPrueba">🧪 Modo prueba: posición simulada junto a la Catedral</div>
+
+  <div id="mapa"></div>
+
+  <div class="tarjeta">
+    <button class="boton-centrar" id="botonCentrar" title="Centrar en mi posición">📍</button>
+    <div class="titulo-hito" id="tituloHito">Buscando tu posición GPS…</div>
+    <div class="detalle" id="detalleHito">Acepta el permiso de ubicación cuando el navegador lo pida.</div>
+    <a class="boton-ra" id="botonRA" href="#">Ver en RA 👁️</a>
+  </div>
+
+  <!-- Datos de los hitos y funciones compartidas -->
+  <script src="hitos.js"></script>
+
+  <script>
+    // ==========================================================
+    // 1. MODO PRUEBA
+    // Si abres index.html?test=1 el juego simula que estás a unos
+    // 15 m de la Catedral. Sirve para programar sin ir a Jaca.
+    // ==========================================================
+    const modoPrueba = new URLSearchParams(location.search).get("test") === "1";
+    const POSICION_SIMULADA = { lat: 42.57072, lon: -0.54932 }; // junto a la Catedral
+
+    if (modoPrueba) {
+      document.getElementById("avisoPrueba").style.display = "block";
+    }
+
+    // ==========================================================
+    // 2. CREAR EL MAPA (Leaflet + OpenStreetMap)
+    // ==========================================================
+    const mapa = L.map("mapa", { zoomControl: false }).setView([42.5707, -0.5520], 15);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap",
+    }).addTo(mapa);
+
+    L.control.zoom({ position: "topright" }).addTo(mapa);
+
+    // ==========================================================
+    // 3. PINTAR LOS 5 HITOS
+    // ==========================================================
+    const marcadores = {}; // para poder actualizar su color después
+
+    function iconoHito(hito, descubierto) {
+      return L.divIcon({
+        className: "",
+        html: `<div class="pin ${descubierto ? "logrado" : ""}">${hito.emoji}</div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+      });
+    }
+
+    function textoPopup(hito, descubierto) {
+      const estado = descubierto
+        ? "⭐ <strong>Descubierto</strong>"
+        : "Pendiente de descubrir";
+      return `<strong>${hito.emoji} ${hito.nombre}</strong><br>
+              <em>${hito.epoca}</em><br><br>${hito.descripcion}<br><br>${estado}`;
+    }
+
+    const grupo = [];
+    HITOS.forEach((hito) => {
+      const descubierto = cargarDescubiertos().includes(hito.id);
+      const marcador = L.marker([hito.lat, hito.lon], { icon: iconoHito(hito, descubierto) })
+        .addTo(mapa)
+        .bindPopup(textoPopup(hito, descubierto));
+      marcadores[hito.id] = marcador;
+      grupo.push(marcador);
+    });
+
+    // Encuadrar el mapa para que se vean los 5 hitos
+    mapa.fitBounds(L.featureGroup(grupo).getBounds().pad(0.18));
+
+    // ==========================================================
+    // 4. PROGRESO (contador + barra de ajedrezado)
+    // ==========================================================
+    function refrescarProgreso() {
+      const descubiertos = cargarDescubiertos();
+      document.getElementById("progresoTexto").textContent =
+        `${descubiertos.length}/${HITOS.length} hitos`;
+      document.getElementById("barraProgreso").style.width =
+        (descubiertos.length / HITOS.length) * 100 + "%";
+
+      // Actualizar color y popup de cada pin
+      HITOS.forEach((hito) => {
+        const logrado = descubiertos.includes(hito.id);
+        marcadores[hito.id].setIcon(iconoHito(hito, logrado));
+        marcadores[hito.id].setPopupContent(textoPopup(hito, logrado));
+      });
+    }
+
+    refrescarProgreso();
+
+    // ==========================================================
+    // 5. TU POSICIÓN GPS
+    // ==========================================================
+    let marcadorYo = null;
+    let circuloPrecision = null;
+    let miPosicion = null;
+
+    function alRecibirPosicion(lat, lon, precision) {
+      miPosicion = { lat, lon };
+
+      if (!marcadorYo) {
+        marcadorYo = L.marker([lat, lon], {
+          icon: L.divIcon({ className: "", html: '<div class="yo"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+          zIndexOffset: 1000,
+        }).addTo(mapa);
+        circuloPrecision = L.circle([lat, lon], { radius: precision, color: "#2A6BD4", weight: 1, fillOpacity: 0.08 }).addTo(mapa);
+        mapa.setView([lat, lon], 17);
+      } else {
+        marcadorYo.setLatLng([lat, lon]);
+        circuloPrecision.setLatLng([lat, lon]).setRadius(precision);
+      }
+
+      actualizarTarjeta();
+    }
+
+    function alFallarGPS(error) {
+      document.getElementById("tituloHito").textContent = "Sin señal GPS 😕";
+      document.getElementById("detalleHito").textContent =
+        "Activa la ubicación del móvil y da permiso de «ubicación precisa» a Chrome. Luego recarga la página.";
+    }
+
+    if (modoPrueba) {
+      // Posición fija simulada
+      alRecibirPosicion(POSICION_SIMULADA.lat, POSICION_SIMULADA.lon, 8);
+    } else if ("geolocation" in navigator) {
+      navigator.geolocation.watchPosition(
+        (pos) => alRecibirPosicion(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+        alFallarGPS,
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 27000 }
+      );
+    } else {
+      alFallarGPS();
+    }
+
+    // ==========================================================
+    // 6. TARJETA INFERIOR: hito pendiente más cercano
+    // ==========================================================
+    function actualizarTarjeta() {
+      const descubiertos = cargarDescubiertos();
+      const pendientes = HITOS.filter((h) => !descubiertos.includes(h.id));
+      const titulo = document.getElementById("tituloHito");
+      const detalle = document.getElementById("detalleHito");
+      const botonRA = document.getElementById("botonRA");
+
+      // ¿Juego completado?
+      if (pendientes.length === 0) {
+        titulo.textContent = "🏆 ¡Has descubierto los 5 hitos de Jaca!";
+        detalle.textContent = "Pulsa «Reiniciar» arriba para volver a jugar.";
+        botonRA.style.display = "none";
+        return;
+      }
+
+      if (!miPosicion) return;
+
+      // Buscar el pendiente más cercano
+      let masCercano = null;
+      let menorDistancia = Infinity;
+      pendientes.forEach((hito) => {
+        const d = distanciaMetros(miPosicion.lat, miPosicion.lon, hito.lat, hito.lon);
+        if (d < menorDistancia) { menorDistancia = d; masCercano = hito; }
+      });
+
+      titulo.textContent = `${masCercano.emoji} ${masCercano.nombre}`;
+
+      const distanciaTexto = menorDistancia >= 1000
+        ? (menorDistancia / 1000).toFixed(1) + " km"
+        : Math.round(menorDistancia) + " m";
+
+      if (menorDistancia <= masCercano.radio) {
+        detalle.textContent = "¡Estás aquí! Abre la cámara para verlo.";
+        botonRA.style.display = "block";
+        botonRA.href = `ra.html?hito=${masCercano.id}` + (modoPrueba ? "&test=1" : "");
+      } else {
+        detalle.textContent = `A ${distanciaTexto} · acércate a menos de ${masCercano.radio} m para verlo en RA`;
+        botonRA.style.display = "none";
+      }
+    }
+
+    // ==========================================================
+    // 7. BOTONES
+    // ==========================================================
+    document.getElementById("botonCentrar").addEventListener("click", () => {
+      if (miPosicion) mapa.setView([miPosicion.lat, miPosicion.lon], 17);
+    });
+
+    document.getElementById("botonReinicio").addEventListener("click", () => {
+      if (confirm("¿Borrar el progreso y empezar de nuevo?")) {
+        reiniciarJuego();
+        refrescarProgreso();
+        actualizarTarjeta();
+      }
+    });
+
+    // Al volver de la vista RA, refrescar el estado del juego
+    window.addEventListener("pageshow", () => {
+      refrescarProgreso();
+      actualizarTarjeta();
+    });
+  </script>
+</body>
+</html>

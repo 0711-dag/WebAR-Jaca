@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Jaca RA — Vista de cámara</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap" rel="stylesheet" />
+
+  <!-- A-Frame (motor 3D) + AR.js (realidad aumentada por GPS), versiones fijas -->
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.7/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+    /* Todo lo que flota sobre la cámara necesita un z-index alto */
+    .hud { position: fixed; z-index: 10; }
+
+    /* ---------- Píldora superior: nombre del hito y distancia ---------- */
+    .pildora {
+      top: calc(10px + env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(43, 40, 35, 0.88);
+      color: #F5EFE3;
+      border-radius: 999px;
+      padding: 8px 18px;
+      text-align: center;
+      max-width: 92vw;
+    }
+
+    .pildora .nombre { font-family: "Marcellus", serif; font-size: 1rem; }
+    .pildora .distancia { font-size: 0.78rem; color: #C9972B; margin-top: 1px; }
+
+    /* ---------- Botonera inferior ---------- */
+    .botonera {
+      bottom: calc(14px + env(safe-area-inset-bottom));
+      left: 14px;
+      right: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .boton-descubrir {
+      display: none;
+      background: #C9972B;
+      color: #2B2823;
+      border: none;
+      font-size: 1.1rem;
+      font-weight: 700;
+      padding: 14px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .boton-volver {
+      background: rgba(43, 40, 35, 0.88);
+      color: #F5EFE3;
+      text-align: center;
+      text-decoration: none;
+      font-size: 0.95rem;
+      padding: 12px;
+      border-radius: 12px;
+    }
+
+    /* ---------- Tarjeta de hito descubierto ---------- */
+    .logro {
+      inset: 0;
+      background: rgba(43, 40, 35, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+    }
+
+    .logro-tarjeta {
+      background: #F5EFE3;
+      color: #2B2823;
+      border-radius: 16px;
+      padding: 26px 22px;
+      max-width: 420px;
+      width: 100%;
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .logro-tarjeta .ajedrezado {
+      height: 12px;
+      margin: -26px -22px 18px;
+      background:
+        conic-gradient(#C9972B 90deg, #9C711C 90deg 180deg,
+                       #9C711C 180deg 270deg, #C9972B 270deg)
+        0 0 / 12px 12px;
+    }
+
+    .logro-tarjeta .emoji { font-size: 3rem; }
+    .logro-tarjeta h2 { font-family: "Marcellus", serif; font-weight: 400; margin: 8px 0 2px; }
+    .logro-tarjeta .epoca { color: #8A8174; font-size: 0.85rem; margin-bottom: 12px; }
+    .logro-tarjeta p { font-size: 0.92rem; line-height: 1.45; text-align: left; }
+
+    .logro-tarjeta a {
+      display: block;
+      margin-top: 18px;
+      background: #2F5D50;
+      color: #F5EFE3;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 13px;
+      border-radius: 10px;
+    }
+
+    a:focus-visible, button:focus-visible { outline: 3px solid #C9972B; outline-offset: 2px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Escena de realidad aumentada (la cámara del móvil) -->
+  <a-scene
+    vr-mode-ui="enabled: false"
+    loading-screen="enabled: false"
+    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
+    renderer="antialias: true; alpha: true"
+    cursor="rayOrigin: mouse"
+    raycaster="objects: .clickable">
+  </a-scene>
+
+  <!-- Interfaz sobre la cámara -->
+  <div class="hud pildora">
+    <div class="nombre" id="nombreHito">Cargando…</div>
+    <div class="distancia" id="distanciaHito">Buscando señal GPS…</div>
+  </div>
+
+  <div class="hud botonera">
+    <button class="boton-descubrir" id="botonDescubrir">⭐ ¡Descubrir hito!</button>
+    <a class="boton-volver" id="botonVolver" href="index.html">← Volver al mapa</a>
+  </div>
+
+  <!-- Tarjeta que aparece al capturar el hito -->
+  <div class="hud logro" id="pantallaLogro">
+    <div class="logro-tarjeta">
+      <div class="ajedrezado"></div>
+      <div class="emoji" id="logroEmoji"></div>
+      <h2 id="logroNombre"></h2>
+      <div class="epoca" id="logroEpoca"></div>
+      <p id="logroDescripcion"></p>
+      <a id="logroVolver" href="index.html">Volver al mapa</a>
+    </div>
+  </div>
+
+  <script src="hitos.js"></script>
+
+  <script>
+    // ==========================================================
+    // 1. ¿Qué hito venimos a ver? Se lee de la URL: ra.html?hito=catedral
+    // ==========================================================
+    const parametros = new URLSearchParams(location.search);
+    const hito = buscarHito(parametros.get("hito"));
+    const modoPrueba = parametros.get("test") === "1";
+
+    if (!hito) {
+      // Si la URL no trae un hito válido, volvemos al mapa
+      location.href = "index.html";
+    }
+
+    document.getElementById("nombreHito").textContent = `${hito.emoji} ${hito.nombre}`;
+
+    // Mantener el modo prueba al volver al mapa
+    if (modoPrueba) {
+      document.getElementById("botonVolver").href = "index.html?test=1";
+      document.getElementById("logroVolver").href = "index.html?test=1";
+    }
+
+    // ==========================================================
+    // 2. MONTAR LA ESCENA RA
+    //    - Una cámara que se mueve con tu GPS real
+    //    - Un octaedro dorado anclado a las coordenadas del hito
+    // ==========================================================
+    const escena = document.querySelector("a-scene");
+
+    function montarEscena() {
+      // --- Cámara GPS ---
+      const camara = document.createElement("a-camera");
+      let propiedadesGPS = "gpsMinDistance: 3";
+
+      if (modoPrueba) {
+        // En modo prueba fingimos estar a unos 25 m al sur del hito,
+        // así el objeto aparece sin necesidad de ir a Jaca.
+        const latSimulada = hito.lat - 0.00022;
+        propiedadesGPS += `; simulateLatitude: ${latSimulada}; simulateLongitude: ${hito.lon}`;
+      }
+
+      camara.setAttribute("gps-new-camera", propiedadesGPS);
+      escena.appendChild(camara);
+
+      // Cada vez que el GPS actualiza tu posición, recalculamos la distancia
+      camara.addEventListener("gps-camera-update-position", (evento) => {
+        const pos = evento.detail.position;
+        alActualizarPosicion(pos.latitude, pos.longitude);
+      });
+
+      // --- Objeto 3D del hito ---
+      const ancla = document.createElement("a-entity");
+      ancla.setAttribute("gps-new-entity-place", `latitude: ${hito.lat}; longitude: ${hito.lon}`);
+
+      const gema = document.createElement("a-octahedron");
+      gema.classList.add("clickable");
+      gema.setAttribute("radius", "5");
+      gema.setAttribute("material", "color: #C9972B; metalness: 0.6; roughness: 0.3; emissive: #5e4408");
+      gema.setAttribute("animation", "property: rotation; to: 0 360 0; dur: 7000; easing: linear; loop: true");
+      gema.setAttribute("animation__flotar", "property: position; from: 0 -0.8 0; to: 0 0.8 0; dir: alternate; dur: 1600; easing: easeInOutSine; loop: true");
+      // Tocar el objeto también lo descubre (si estás lo bastante cerca)
+      gema.addEventListener("click", intentarDescubrir);
+      ancla.appendChild(gema);
+
+      const etiqueta = document.createElement("a-text");
+      etiqueta.setAttribute("value", hito.nombre);
+      etiqueta.setAttribute("position", "0 9 0");
+      etiqueta.setAttribute("align", "center");
+      etiqueta.setAttribute("width", "45");
+      etiqueta.setAttribute("color", "#FFFFFF");
+      etiqueta.setAttribute("side", "double");
+      ancla.appendChild(etiqueta);
+
+      escena.appendChild(ancla);
+    }
+
+    if (escena.hasLoaded) {
+      montarEscena();
+    } else {
+      escena.addEventListener("loaded", montarEscena);
+    }
+
+    // ==========================================================
+    // 3. DISTANCIA Y BOTÓN DE DESCUBRIR
+    // ==========================================================
+    const textoDistancia = document.getElementById("distanciaHito");
+    const botonDescubrir = document.getElementById("botonDescubrir");
+    let alAlcance = modoPrueba; // en modo prueba siempre se puede descubrir
+
+    function alActualizarPosicion(lat, lon) {
+      const distancia = distanciaMetros(lat, lon, hito.lat, hito.lon);
+      textoDistancia.textContent = `A ${Math.round(distancia)} m · mueve el móvil para encontrarlo`;
+
+      alAlcance = modoPrueba || distancia <= hito.radio;
+      botonDescubrir.style.display = alAlcance ? "block" : "none";
+    }
+
+    if (modoPrueba) {
+      textoDistancia.textContent = "🧪 Modo prueba · mueve el móvil para encontrarlo";
+      botonDescubrir.style.display = "block";
+    }
+
+    // ==========================================================
+    // 4. DESCUBRIR EL HITO
+    // ==========================================================
+    function intentarDescubrir() {
+      if (!alAlcance) return;
+
+      marcarDescubierto(hito.id);
+
+      // Rellenar y mostrar la tarjeta de logro
+      document.getElementById("logroEmoji").textContent = hito.emoji;
+      document.getElementById("logroNombre").textContent = hito.nombre;
+      document.getElementById("logroEpoca").textContent = hito.epoca;
+      document.getElementById("logroDescripcion").textContent = hito.descripcion;
+      document.getElementById("pantallaLogro").style.display = "flex";
+
+      // Vibración corta de recompensa (si el móvil lo permite)
+      if (navigator.vibrate) navigator.vibrate(120);
+    }
+
+    botonDescubrir.addEventListener("click", intentarDescubrir);
+  </script>
+</body>
+</html>
