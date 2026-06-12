@@ -1,5 +1,5 @@
 // ============================================================
-// JACA RA — Figuras 3D temáticas de los 5 hitos
+// JACA RA — Figuras 3D temáticas de los hitos
 // ------------------------------------------------------------
 // Cada hito tiene su propia figura, montada con piezas
 // geométricas sencillas (cajas, cilindros, esferas, conos...),
@@ -10,6 +10,7 @@
 //   torre     → Torre con su reloj marcando las 12 y cuarto
 //   puente    → Puente de un ojo sobre el río Aragón
 //   santiago  → Vieira, la concha del peregrino del Camino
+//   ermita    → Ermita románica con espadaña, campana y ábside
 //
 // CÓMO INSTALARLO EN EL JUEGO (un solo paso):
 //   En ra.html, justo debajo de la línea
@@ -318,6 +319,110 @@ function modeloVieira() {
   return figura;
 }
 
+// ---------- 🔔 Ermita de Sarsa → Ermita románica ----------
+// La ermita en miniatura: nave de piedra con tejado a dos aguas,
+// ábside semicircular detrás, portada con su arquivolta y, en lo
+// alto de la fachada, la espadaña con su campana dorada y su cruz.
+// El edificio real se trasladó piedra a piedra... y esta figura
+// también va montada pieza a pieza. Unos 7,4 m con su escala.
+function modeloErmita() {
+  const figura = pieza("a-entity");
+  figura.setAttribute("scale", "1.2 1.2 1.2");
+
+  // Los muros de los gabletes (triángulos) se ven por las dos caras
+  const PIEDRA_DOBLE = PIEDRA + "; side: double";
+
+  // Zócalo (la peana de piedra sobre la que se asienta todo)
+  figura.appendChild(pieza("a-box", {
+    width: 3.8, height: 0.5, depth: 4.8,
+    position: "0 0.25 0", material: PIEDRA_OSCURA,
+  }));
+
+  // Nave (el cuerpo principal, con la fachada mirando al frente)
+  figura.appendChild(pieza("a-box", {
+    width: 3.4, height: 2.6, depth: 4.4,
+    position: "0 1.8 0", material: PIEDRA,
+  }));
+
+  // Gabletes: los triángulos que cierran el tejado por delante y detrás
+  figura.appendChild(pieza("a-triangle", {
+    "vertex-a": "-1.7 3.1 0", "vertex-b": "1.7 3.1 0", "vertex-c": "0 4.05 0",
+    position: "0 0 2.2", material: PIEDRA_DOBLE,
+  }));
+  figura.appendChild(pieza("a-triangle", {
+    "vertex-a": "-1.7 3.1 0", "vertex-b": "1.7 3.1 0", "vertex-c": "0 4.05 0",
+    position: "0 0 -2.2", material: PIEDRA_DOBLE,
+  }));
+
+  // Tejado a dos aguas (dos planchas inclinadas) y su cumbrera
+  figura.appendChild(pieza("a-box", {
+    width: 2.08, height: 0.16, depth: 4.8,
+    position: "-0.93 3.58 0", rotation: "0 0 27", material: TEJADO,
+  }));
+  figura.appendChild(pieza("a-box", {
+    width: 2.08, height: 0.16, depth: 4.8,
+    position: "0.93 3.58 0", rotation: "0 0 -27", material: TEJADO,
+  }));
+  figura.appendChild(pieza("a-box", {
+    width: 0.24, height: 0.12, depth: 4.9,
+    position: "0 4.08 0", material: TEJADO,
+  }));
+
+  // Ábside semicircular pegado a la parte de atrás, con su tejadillo
+  figura.appendChild(pieza("a-cylinder", {
+    radius: 1.1, height: 2.3,
+    position: "0 1.65 -2.2", material: PIEDRA,
+  }));
+  figura.appendChild(pieza("a-cone", {
+    "radius-bottom": 1.25, height: 0.65,
+    position: "0 3.1 -2.2", material: TEJADO,
+  }));
+
+  // Portada: puerta de medio punto con su arquivolta de piedra
+  figura.appendChild(pieza("a-box", {
+    width: 0.62, height: 1.05, depth: 0.14,
+    position: "0 1.03 2.21", material: NEGRO,
+  }));
+  figura.appendChild(pieza("a-cylinder", {
+    radius: 0.31, height: 0.14, rotation: "90 0 0",
+    position: "0 1.55 2.21", material: NEGRO,
+  }));
+  figura.appendChild(pieza("a-torus", {
+    radius: 0.42, "radius-tubular": 0.08, arc: 180,
+    position: "0 1.55 2.24", material: PIEDRA_OSCURA,
+  }));
+
+  // Óculo: la ventanita redonda del gablete
+  figura.appendChild(pieza("a-cylinder", {
+    radius: 0.17, height: 0.14, rotation: "90 0 0",
+    position: "0 3.5 2.21", material: NEGRO,
+  }));
+
+  // Espadaña: el muro-campanario con su hueco, su campana y su cruz
+  figura.appendChild(pieza("a-box", {
+    width: 1.45, height: 1.55, depth: 0.28,
+    position: "0 4.8 2.2", material: PIEDRA,
+  }));
+  figura.appendChild(pieza("a-box", {
+    width: 0.52, height: 0.8, depth: 0.34,
+    position: "0 4.92 2.2", material: NEGRO,
+  }));
+  figura.appendChild(pieza("a-cone", {
+    "radius-bottom": 0.19, "radius-top": 0.06, height: 0.3,
+    position: "0 4.88 2.2", material: ORO,
+  }));
+  figura.appendChild(pieza("a-box", {
+    width: 0.1, height: 0.6, depth: 0.1,
+    position: "0 5.85 2.2", material: ORO,
+  }));
+  figura.appendChild(pieza("a-box", {
+    width: 0.38, height: 0.1, depth: 0.1,
+    position: "0 5.95 2.2", material: ORO,
+  }));
+
+  return figura;
+}
+
 // ---------- Figura de reserva: el octaedro dorado de siempre ----------
 function modeloGema() {
   const figura = pieza("a-entity");
@@ -338,6 +443,7 @@ function crearModelo(idHito) {
     torre: modeloTorreReloj,
     puente: modeloPuente,
     santiago: modeloVieira,
+    ermita: modeloErmita,
   };
   const construir = constructores[idHito] || modeloGema;
   const figura = construir();
