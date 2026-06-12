@@ -37,6 +37,16 @@
       display: none;
     }
 
+    /* Franja azul de avisos: aquí te explicamos qué falla y cómo arreglarlo */
+    #aviso {
+      position: fixed; left: 0; right: 0; z-index: 11;
+      top: 62px;
+      background: #2a6bd4; color: #ffffff;
+      font-size: 13px; font-weight: 600; line-height: 1.4;
+      text-align: center; padding: 8px 14px;
+      display: none;
+    }
+
     /* ---------- Botones inferiores ---------- */
     #acciones {
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
@@ -95,6 +105,7 @@
     <p id="estado">Buscando señal GPS… (a cielo abierto va más rápido)</p>
   </div>
   <div id="prueba">🧪 Modo prueba: posición simulada junto al hito</div>
+  <div id="aviso"></div>
 
   <a-scene
     vr-mode-ui="enabled: false"
@@ -231,8 +242,9 @@
         distanciaActual = distanciaMetros(lat, lon, hito.lat, hito.lon);
         const metros = Math.round(distanciaActual);
         const alAlcance = distanciaActual <= hito.radio;
+        const senal = precisionActual ? " (señal ±" + precisionActual + " m)" : "";
 
-        estado.textContent = "A " + metros + " m · " +
+        estado.textContent = "A " + metros + " m" + senal + " · " +
           (alAlcance ? "¡al alcance!" : "sigue acercándote (a menos de " + hito.radio + " m)");
 
         if (!descubierto) boton.disabled = !alAlcance;
@@ -269,12 +281,112 @@
 
       boton.addEventListener("click", intentarDescubrir);
 
-      // Si el GPS tarda demasiado, damos una pista
-      setTimeout(function () {
-        if (distanciaActual === Infinity) {
-          estado.textContent = "Buscando señal GPS… comprueba el permiso de ubicación y sal a cielo abierto.";
+      // ==========================================================
+      // 4. VIGILANTE DEL GPS (diagnóstico en español)
+      //    AR.js ya pide la ubicación para mover la cámara, pero
+      //    cuando algo falla sus avisos salen en inglés o ni se ven.
+      //    Aquí también la pedimos nosotros: así el juego (distancia
+      //    y botón) funciona aunque AR.js falle, y podemos decirte
+      //    exactamente qué pasa y cómo arreglarlo.
+      // ==========================================================
+      let precisionActual = 0;
+      let avisoPrecisionMostrado = false;
+
+      if (!modoPrueba) {
+        // a) ¿En qué estado está el permiso de ubicación?
+        if (navigator.permissions && navigator.permissions.query) {
+          navigator.permissions
+            .query({ name: "geolocation" })
+            .then(function (permiso) {
+              avisarSegunPermiso(permiso.state);
+              permiso.onchange = function () { avisarSegunPermiso(permiso.state); };
+            })
+            .catch(function () { /* algunos navegadores no lo soportan; no pasa nada */ });
         }
-      }, 15000);
+
+        // b) Pedir la posición de forma continua, con máxima precisión
+        navigator.geolocation.watchPosition(
+          function (pos) {
+            precisionActual = Math.round(pos.coords.accuracy);
+            alActualizarPosicion(pos.coords.latitude, pos.coords.longitude);
+
+            // Si la señal es muy gruesa, casi seguro que el permiso
+            // se dio como "Aproximada" en vez de "Precisa".
+            if (precisionActual > 30 && !avisoPrecisionMostrado) {
+              avisoPrecisionMostrado = true;
+              mostrarAviso("📡 Señal poco precisa (±" + precisionActual +
+                " m). Toca el 🔒 de la barra de dirección → Permisos → Ubicación y marca «Precisa». Luego recarga.");
+            }
+          },
+          function (error) {
+            // error.code: 1 = permiso denegado · 2 = sin posición · 3 = tardó demasiado
+            if (error.code === 1) {
+              estado.textContent = "⛔ Permiso de ubicación bloqueado.";
+              mostrarAviso("Toca el icono 🔒 junto a la dirección → Permisos → Ubicación → Permitir, y recarga la página.", true);
+            } else if (error.code === 2) {
+              estado.textContent = "El móvil no consigue calcular tu posición.";
+              mostrarAviso("Activa la «Ubicación» del teléfono (en los ajustes rápidos de la barra superior) y recarga.", true);
+            } else {
+              estado.textContent = "El GPS está tardando… sal a cielo abierto y espera unos segundos.";
+            }
+          },
+          { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 }
+        );
+      }
+
+      function avisarSegunPermiso(estadoPermiso) {
+        if (estadoPermiso === "prompt") {
+          mostrarAviso("Cuando el navegador pregunte, elige «Precisa» y «Permitir mientras se visita el sitio» 👍");
+        } else if (estadoPermiso === "denied") {
+          estado.textContent = "⛔ Permiso de ubicación bloqueado.";
+          mostrarAviso("Toca el icono 🔒 junto a la dirección → Permisos → Ubicación → Permitir, y recarga la página.", true);
+        }
+      }
+
+      // ==========================================================
+      // 5. PLAN B DE LA BRÚJULA
+      //    En el móvil, AR.js gira la vista con la brújula y el
+      //    giroscopio y DESACTIVA el arrastre con el dedo. Si los
+      //    sensores no responden, la vista se queda congelada y es
+      //    imposible encontrar la figura (por eso en «vista de
+      //    ordenador» sí la veías: ahí el arrastre está activado).
+      //    Si en 6 segundos no llega ningún dato del sensor,
+      //    reactivamos el arrastre para que puedas mirar alrededor.
+      // ==========================================================
+      let brujulaFunciona = false;
+      function anotarSensor(evento) {
+        if (evento.alpha !== null && evento.alpha !== undefined) brujulaFunciona = true;
+      }
+      window.addEventListener("deviceorientationabsolute", anotarSensor);
+      window.addEventListener("deviceorientation", anotarSensor);
+
+      setTimeout(function () {
+        const camara = document.querySelector("[gps-new-camera]");
+        // Solo actuamos si AR.js puso el control por sensores (es decir, en móvil)
+        if (!brujulaFunciona && camara && camara.hasAttribute("arjs-device-orientation-controls")) {
+          camara.removeAttribute("arjs-device-orientation-controls");
+          camara.setAttribute("look-controls-enabled", "true");
+          mostrarAviso("🧭 Tu móvil no envía datos de brújula: arrastra el dedo por la pantalla para mirar alrededor.", true);
+        }
+      }, 6000);
+
+      // ==========================================================
+      // 6. AVISOS EN PANTALLA (la franja azul bajo la barra)
+      //    Los avisos "fijos" se quedan; el resto desaparece solo.
+      // ==========================================================
+      const cajaAviso = document.getElementById("aviso");
+      let temporizadorAviso = null;
+
+      function mostrarAviso(texto, fijo) {
+        cajaAviso.textContent = texto;
+        cajaAviso.style.display = "block";
+        clearTimeout(temporizadorAviso);
+        if (!fijo) {
+          temporizadorAviso = setTimeout(function () {
+            cajaAviso.style.display = "none";
+          }, 9000);
+        }
+      }
     }
   </script>
 </body>
