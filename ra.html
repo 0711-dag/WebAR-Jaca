@@ -1,316 +1,281 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Jaca RA — Vista de cámara</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap" rel="stylesheet" />
-
-  <!-- A-Frame (motor 3D) + AR.js (realidad aumentada por GPS), versiones fijas -->
+  <!-- Motor 3D y realidad aumentada (versiones fijas, las del juego) -->
   <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.7/aframe/build/aframe-ar.js"></script>
 
+  <!-- Datos de los hitos y figuras 3D temáticas (archivos del repositorio) -->
+  <script src="hitos.js"></script>
+  <script src="modelos.js"></script>
+
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
 
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-
-    /* Todo lo que flota sobre la cámara necesita un z-index alto */
-    .hud { position: fixed; z-index: 10; }
-
-    /* ---------- Píldora superior: nombre del hito y distancia ---------- */
-    .pildora {
-      top: calc(10px + env(safe-area-inset-top));
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(43, 40, 35, 0.88);
-      color: #F5EFE3;
-      border-radius: 999px;
-      padding: 8px 18px;
-      text-align: center;
-      max-width: 92vw;
+    /* ---------- Barra superior: nombre del hito y estado del GPS ---------- */
+    #barra {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      padding: 12px 16px;
+      background: rgba(16, 21, 31, 0.85);
+      color: #f1e7d0;
     }
+    #barra h1 { margin: 0; font-size: 17px; font-weight: 600; }
+    #estado { margin: 4px 0 0; font-size: 13px; color: #d9d2c2; }
 
-    .pildora .nombre { font-family: "Marcellus", serif; font-size: 1rem; }
-    .pildora .distancia { font-size: 0.78rem; color: #C9972B; margin-top: 1px; }
-
-    /* ---------- Botonera inferior ---------- */
-    .botonera {
-      bottom: calc(14px + env(safe-area-inset-bottom));
-      left: 14px;
-      right: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .boton-descubrir {
+    #prueba {
+      position: fixed; left: 0; right: 0; z-index: 10;
+      top: 62px;
+      background: #d9a62e; color: #10151f;
+      font-size: 12.5px; font-weight: 700;
+      text-align: center; padding: 6px 12px;
       display: none;
-      background: #C9972B;
-      color: #2B2823;
-      border: none;
-      font-size: 1.1rem;
-      font-weight: 700;
-      padding: 14px;
-      border-radius: 12px;
-      cursor: pointer;
     }
 
-    .boton-volver {
-      background: rgba(43, 40, 35, 0.88);
-      color: #F5EFE3;
-      text-align: center;
-      text-decoration: none;
-      font-size: 0.95rem;
-      padding: 12px;
-      border-radius: 12px;
+    /* ---------- Botones inferiores ---------- */
+    #acciones {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+      display: flex; gap: 10px;
+      padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, rgba(16, 21, 31, 0.9), rgba(16, 21, 31, 0));
+    }
+    #btnDescubrir {
+      flex: 1.4; padding: 14px; border: none; border-radius: 14px;
+      background: #d9a62e; color: #10151f;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+    #btnDescubrir:disabled { opacity: 0.45; }
+    #volver {
+      flex: 1; padding: 14px; border-radius: 14px;
+      background: rgba(241, 231, 208, 0.12); color: #f1e7d0;
+      border: 1px solid rgba(241, 231, 208, 0.35);
+      font-size: 15px; text-align: center; text-decoration: none;
     }
 
-    /* ---------- Tarjeta de hito descubierto ---------- */
-    .logro {
-      inset: 0;
-      background: rgba(43, 40, 35, 0.8);
+    /* ---------- Ficha histórica al descubrir el hito ---------- */
+    #ficha {
+      position: fixed; inset: 0; z-index: 20;
       display: none;
-      align-items: center;
-      justify-content: center;
+      align-items: center; justify-content: center;
+      padding: 22px;
+      background: rgba(16, 21, 31, 0.78);
+    }
+    #ficha.visible { display: flex; }
+    #ficha .tarjeta {
+      width: 100%; max-width: 420px;
+      background: #f7f1e2; color: #2b2620;
+      border-radius: 18px; border-top: 6px solid #d9a62e;
       padding: 22px;
     }
-
-    .logro-tarjeta {
-      background: #F5EFE3;
-      color: #2B2823;
-      border-radius: 16px;
-      padding: 26px 22px;
-      max-width: 420px;
-      width: 100%;
-      text-align: center;
-      overflow: hidden;
+    #ficha h2 { margin: 0 0 4px; font-size: 21px; }
+    #ficha .epoca {
+      margin: 0 0 12px; font-size: 12.5px; font-weight: 700;
+      letter-spacing: 0.6px; text-transform: uppercase; color: #8a6a1c;
     }
-
-    .logro-tarjeta .ajedrezado {
-      height: 12px;
-      margin: -26px -22px 18px;
-      background:
-        conic-gradient(#C9972B 90deg, #9C711C 90deg 180deg,
-                       #9C711C 180deg 270deg, #C9972B 270deg)
-        0 0 / 12px 12px;
-    }
-
-    .logro-tarjeta .emoji { font-size: 3rem; }
-    .logro-tarjeta h2 { font-family: "Marcellus", serif; font-weight: 400; margin: 8px 0 2px; }
-    .logro-tarjeta .epoca { color: #8A8174; font-size: 0.85rem; margin-bottom: 12px; }
-    .logro-tarjeta p { font-size: 0.92rem; line-height: 1.45; text-align: left; }
-
-    .logro-tarjeta a {
-      display: block;
-      margin-top: 18px;
-      background: #2F5D50;
-      color: #F5EFE3;
-      text-decoration: none;
-      font-weight: 600;
-      padding: 13px;
-      border-radius: 10px;
-    }
-
-    a:focus-visible, button:focus-visible { outline: 3px solid #C9972B; outline-offset: 2px; }
-
-    @media (prefers-reduced-motion: reduce) {
-      * { animation: none !important; transition: none !important; }
+    #ficha p { margin: 0 0 18px; font-size: 15px; line-height: 1.55; }
+    #ficha .sello { font-size: 13px; font-weight: 700; color: #1f7a45; margin: 0 0 14px; }
+    #fichaVolver {
+      display: block; width: 100%; padding: 14px;
+      border: none; border-radius: 12px;
+      background: #d9a62e; color: #10151f;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+      text-align: center; text-decoration: none;
     }
   </style>
 </head>
-
 <body>
-  <!-- Escena de realidad aumentada (la cámara del móvil) -->
+
+  <div id="barra">
+    <h1 id="titulo">Jaca RA</h1>
+    <p id="estado">Buscando señal GPS… (a cielo abierto va más rápido)</p>
+  </div>
+  <div id="prueba">🧪 Modo prueba: posición simulada junto al hito</div>
+
   <a-scene
     vr-mode-ui="enabled: false"
-    loading-screen="enabled: false"
-    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false"
     renderer="antialias: true; alpha: true"
-    cursor="rayOrigin: mouse"
-    raycaster="objects: .clickable">
+    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false">
+    <!-- El "dedo láser": permite tocar las piezas con clase clickable -->
+    <a-entity cursor="rayOrigin: mouse" raycaster="objects: .clickable; far: 10000"></a-entity>
   </a-scene>
 
-  <!-- Interfaz sobre la cámara -->
-  <div class="hud pildora">
-    <div class="nombre" id="nombreHito">Cargando…</div>
-    <div class="distancia" id="distanciaHito">Buscando señal GPS…</div>
+  <div id="acciones">
+    <button id="btnDescubrir" disabled>⭐ ¡Descubrir hito!</button>
+    <a id="volver" href="index.html">← Mapa</a>
   </div>
 
-  <div class="hud botonera">
-    <button class="boton-descubrir" id="botonDescubrir">⭐ ¡Descubrir hito!</button>
-    <a class="boton-volver" id="botonVolver" href="index.html">← Volver al mapa</a>
-  </div>
-
-  <!-- Tarjeta que aparece al capturar el hito -->
-  <div class="hud logro" id="pantallaLogro">
-    <div class="logro-tarjeta">
-      <div class="ajedrezado"></div>
-      <div class="emoji" id="logroEmoji"></div>
-      <h2 id="logroNombre"></h2>
-      <div class="epoca" id="logroEpoca"></div>
-      <p id="logroDescripcion"></p>
-      <a id="logroVolver" href="index.html">Volver al mapa</a>
+  <div id="ficha">
+    <div class="tarjeta">
+      <h2 id="fichaNombre"></h2>
+      <p class="epoca" id="fichaEpoca"></p>
+      <p id="fichaTexto"></p>
+      <p class="sello">✓ Hito descubierto — guardado en tu progreso</p>
+      <a id="fichaVolver" href="index.html">Volver al mapa</a>
     </div>
   </div>
 
-  <script src="hitos.js"></script>
-
   <script>
     // ==========================================================
-    // 1. ¿Qué hito venimos a ver? Se lee de la URL: ra.html?hito=catedral
+    // 1. LEER LA DIRECCIÓN: ¿qué hito toca y estamos en modo prueba?
+    //    (index.html abre esta página como  ra.html?hito=catedral)
     // ==========================================================
-    const parametros = new URLSearchParams(location.search);
-    const hito = buscarHito(parametros.get("hito"));
+    const parametros = new URLSearchParams(window.location.search);
     const modoPrueba = parametros.get("test") === "1";
+    const hito = buscarHito(parametros.get("hito") || parametros.get("id"));
 
     if (!hito) {
-      // Si la URL no trae un hito válido, volvemos al mapa
-      location.href = "index.html";
+      // Sin hito válido no hay nada que mostrar: de vuelta al mapa
+      window.location.href = "index.html" + (modoPrueba ? "?test=1" : "");
     }
 
-    document.getElementById("nombreHito").textContent = `${hito.emoji} ${hito.nombre}`;
+    if (hito) {
+      // ---------- Preparar la interfaz ----------
+      const estado = document.getElementById("estado");
+      const boton = document.getElementById("btnDescubrir");
+      const ficha = document.getElementById("ficha");
 
-    // Mantener el modo prueba al volver al mapa
-    if (modoPrueba) {
-      document.getElementById("botonVolver").href = "index.html?test=1";
-      document.getElementById("logroVolver").href = "index.html?test=1";
-    }
+      document.getElementById("titulo").textContent = hito.emoji + " " + hito.nombre;
+      document.getElementById("fichaNombre").textContent = hito.emoji + " " + hito.nombre;
+      document.getElementById("fichaEpoca").textContent = hito.epoca;
+      document.getElementById("fichaTexto").textContent = hito.descripcion;
 
-    // ==========================================================
-    // 2. MONTAR LA ESCENA RA
-    //    - Una cámara que se mueve con tu GPS real
-    //    - Un octaedro dorado anclado a las coordenadas del hito
-    // ==========================================================
-    const escena = document.querySelector("a-scene");
+      // Los enlaces de volver conservan el modo prueba si está activo
+      const urlMapa = "index.html" + (modoPrueba ? "?test=1" : "");
+      document.getElementById("volver").href = urlMapa;
+      document.getElementById("fichaVolver").href = urlMapa;
+      if (modoPrueba) document.getElementById("prueba").style.display = "block";
 
-    // Componente propio: hace que un elemento gire para mirar siempre a la
-    // cámara, así la etiqueta del hito se lee desde cualquier ángulo.
-    AFRAME.registerComponent("mirar-a-la-camara", {
-      init() { this.objetivo = new THREE.Vector3(); },
-      tick() {
-        const camara = this.el.sceneEl.camera;
-        if (!camara) return;
-        camara.getWorldPosition(this.objetivo);
-        this.el.object3D.lookAt(this.objetivo);
-      },
-    });
+      let distanciaActual = Infinity;
+      let descubierto = cargarDescubiertos().includes(hito.id);
+      let figura = null;
 
-    function montarEscena() {
-      // --- Cámara GPS ---
-      const camara = document.createElement("a-camera");
-      let propiedadesGPS = "gpsMinDistance: 3";
+      if (descubierto) boton.textContent = "📜 Ver ficha";
 
-      if (modoPrueba) {
-        // En modo prueba fingimos estar a unos 25 m al sur del hito,
-        // así el objeto aparece sin necesidad de ir a Jaca.
-        const latSimulada = hito.lat - 0.00022;
-        propiedadesGPS += `; simulateLatitude: ${latSimulada}; simulateLongitude: ${hito.lon}`;
+      // ==========================================================
+      // 2. MONTAR LA ESCENA RA
+      //    - Una cámara que se mueve con tu GPS real
+      //    - La figura temática del hito anclada a sus coordenadas
+      // ==========================================================
+      const escena = document.querySelector("a-scene");
+
+      function montarEscena() {
+        // --- Cámara GPS ---
+        const camara = document.createElement("a-camera");
+        let propiedadesGPS = "gpsMinDistance: 3";
+
+        if (modoPrueba) {
+          // En modo prueba fingimos estar a unos 25 m al sur del hito,
+          // así la figura aparece sin necesidad de ir a Jaca.
+          const latSimulada = hito.lat - 0.00022;
+          propiedadesGPS += "; simulateLatitude: " + latSimulada + "; simulateLongitude: " + hito.lon;
+        }
+
+        camara.setAttribute("gps-new-camera", propiedadesGPS);
+        escena.appendChild(camara);
+
+        // Cada vez que el GPS actualiza tu posición, recalculamos la distancia
+        camara.addEventListener("gps-camera-update-position", function (evento) {
+          const pos = evento.detail.position;
+          alActualizarPosicion(pos.latitude, pos.longitude);
+        });
+
+        // --- Figura 3D del hito ---
+        const ancla = document.createElement("a-entity");
+        ancla.setAttribute("gps-new-entity-place", "latitude: " + hito.lat + "; longitude: " + hito.lon);
+
+        if (typeof crearModelo === "function") {
+          // La figura temática de modelos.js (llave, fortaleza, torre...)
+          figura = crearModelo(hito.id);
+        } else {
+          // Red de seguridad: si modelos.js no está subido al repositorio,
+          // el juego sigue funcionando con el octaedro dorado de siempre.
+          figura = document.createElement("a-octahedron");
+          figura.setAttribute("radius", "5");
+          figura.setAttribute("material", "color: #C9972B; metalness: 0.6; roughness: 0.3; emissive: #5e4408");
+          figura.setAttribute("animation", "property: rotation; to: 0 360 0; dur: 7000; easing: linear; loop: true");
+          figura.setAttribute("animation__flotar", "property: position; from: 0 -0.8 0; to: 0 0.8 0; dir: alternate; dur: 1600; easing: easeInOutSine; loop: true");
+        }
+        figura.classList.add("clickable");
+        // Tocar la figura también descubre el hito (si estás lo bastante cerca)
+        figura.addEventListener("click", intentarDescubrir);
+        ancla.appendChild(figura);
+
+        // Etiqueta con el nombre, flotando sobre la figura
+        const etiqueta = document.createElement("a-text");
+        etiqueta.setAttribute("value", hito.nombre);
+        etiqueta.setAttribute("position", "0 9 0");
+        etiqueta.setAttribute("align", "center");
+        etiqueta.setAttribute("width", "45");
+        etiqueta.setAttribute("color", "#FFFFFF");
+        etiqueta.setAttribute("side", "double");
+        ancla.appendChild(etiqueta);
+
+        escena.appendChild(ancla);
       }
 
-      camara.setAttribute("gps-new-camera", propiedadesGPS);
-      escena.appendChild(camara);
+      if (escena.hasLoaded) {
+        montarEscena();
+      } else {
+        escena.addEventListener("loaded", montarEscena);
+      }
 
-      // Cada vez que el GPS actualiza tu posición, recalculamos la distancia
-      camara.addEventListener("gps-camera-update-position", (evento) => {
-        const pos = evento.detail.position;
-        alActualizarPosicion(pos.latitude, pos.longitude);
-      });
+      // ==========================================================
+      // 3. DISTANCIA Y DESCUBRIMIENTO
+      // ==========================================================
+      function alActualizarPosicion(lat, lon) {
+        distanciaActual = distanciaMetros(lat, lon, hito.lat, hito.lon);
+        const metros = Math.round(distanciaActual);
+        const alAlcance = distanciaActual <= hito.radio;
 
-      // --- Objeto 3D del hito ---
-      const ancla = document.createElement("a-entity");
-      ancla.setAttribute("gps-new-entity-place", `latitude: ${hito.lat}; longitude: ${hito.lon}`);
+        estado.textContent = "A " + metros + " m · " +
+          (alAlcance ? "¡al alcance!" : "sigue acercándote (a menos de " + hito.radio + " m)");
 
-      const gema = document.createElement("a-octahedron");
-      gema.classList.add("clickable");
-      gema.setAttribute("radius", "2.5");
-      gema.setAttribute("material", "color: #C9972B; metalness: 0.6; roughness: 0.3; emissive: #5e4408");
-      gema.setAttribute("animation", "property: rotation; to: 0 360 0; dur: 7000; easing: linear; loop: true");
-      gema.setAttribute("animation__flotar", "property: position; from: 0 -0.8 0; to: 0 0.8 0; dir: alternate; dur: 1600; easing: easeInOutSine; loop: true");
-      // Tocar el objeto también lo descubre (si estás lo bastante cerca)
-      gema.addEventListener("click", intentarDescubrir);
-      ancla.appendChild(gema);
+        if (!descubierto) boton.disabled = !alAlcance;
+      }
 
-      const etiqueta = document.createElement("a-text");
-      etiqueta.setAttribute("value", hito.nombre);
-      etiqueta.setAttribute("position", "0 4.5 0");
-      etiqueta.setAttribute("align", "center");
-      etiqueta.setAttribute("width", "25");
-      etiqueta.setAttribute("color", "#FFFFFF");
-      etiqueta.setAttribute("mirar-a-la-camara", "");
-      ancla.appendChild(etiqueta);
+      function intentarDescubrir() {
+        // Si ya estaba descubierto, solo reabrimos su ficha
+        if (descubierto) { mostrarFicha(); return; }
 
-      escena.appendChild(ancla);
+        if (distanciaActual > hito.radio) {
+          estado.textContent = "Aún estás a " + Math.round(distanciaActual) +
+            " m; acércate a menos de " + hito.radio + " m.";
+          return;
+        }
+
+        descubierto = true;
+        marcarDescubierto(hito.id);
+        if (navigator.vibrate) navigator.vibrate(120);
+
+        // Pequeño efecto de captura: la figura se encoge antes de la ficha
+        if (figura) {
+          figura.setAttribute("animation__captura",
+            "property: scale; to: 0.01 0.01 0.01; dur: 420; easing: easeInBack");
+        }
+        boton.textContent = "📜 Ver ficha";
+        boton.disabled = false;
+
+        setTimeout(mostrarFicha, 450);
+      }
+
+      function mostrarFicha() {
+        ficha.classList.add("visible");
+      }
+
+      boton.addEventListener("click", intentarDescubrir);
+
+      // Si el GPS tarda demasiado, damos una pista
+      setTimeout(function () {
+        if (distanciaActual === Infinity) {
+          estado.textContent = "Buscando señal GPS… comprueba el permiso de ubicación y sal a cielo abierto.";
+        }
+      }, 15000);
     }
-
-    if (escena.hasLoaded) {
-      montarEscena();
-    } else {
-      escena.addEventListener("loaded", montarEscena);
-    }
-
-    // ==========================================================
-    // 3. DISTANCIA Y BOTÓN DE DESCUBRIR
-    // ==========================================================
-    const textoDistancia = document.getElementById("distanciaHito");
-    const botonDescubrir = document.getElementById("botonDescubrir");
-    let alAlcance = modoPrueba; // en modo prueba siempre se puede descubrir
-
-    function alActualizarPosicion(lat, lon) {
-      const distancia = distanciaMetros(lat, lon, hito.lat, hito.lon);
-      textoDistancia.textContent = `A ${Math.round(distancia)} m · mueve el móvil para encontrarlo`;
-
-      alAlcance = modoPrueba || distancia <= hito.radio;
-      botonDescubrir.style.display = alAlcance ? "block" : "none";
-    }
-
-    if (modoPrueba) {
-      textoDistancia.textContent = "🧪 Modo prueba · mueve el móvil para encontrarlo";
-      botonDescubrir.style.display = "block";
-    } else if ("geolocation" in navigator) {
-      // Lectura GPS propia, independiente de AR.js: la distancia y el botón
-      // funcionan aunque la librería de RA tarde en arrancar, y si algo
-      // falla se muestra el motivo exacto en pantalla.
-      navigator.geolocation.watchPosition(
-        (pos) => alActualizarPosicion(pos.coords.latitude, pos.coords.longitude),
-        (error) => {
-          if (error.code === 1) {
-            textoDistancia.textContent =
-              "⛔ Ubicación bloqueada: icono junto a la URL → Permisos → Ubicación → Permitir, y recarga";
-          } else if (error.code === 2) {
-            textoDistancia.textContent =
-              "📡 Sin señal GPS: muévete a una zona más abierta y espera";
-          } else {
-            textoDistancia.textContent =
-              "⏳ El GPS está tardando… espera quieto unos segundos";
-          }
-        },
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
-      );
-    }
-
-    // ==========================================================
-    // 4. DESCUBRIR EL HITO
-    // ==========================================================
-    function intentarDescubrir() {
-      if (!alAlcance) return;
-
-      marcarDescubierto(hito.id);
-
-      // Rellenar y mostrar la tarjeta de logro
-      document.getElementById("logroEmoji").textContent = hito.emoji;
-      document.getElementById("logroNombre").textContent = hito.nombre;
-      document.getElementById("logroEpoca").textContent = hito.epoca;
-      document.getElementById("logroDescripcion").textContent = hito.descripcion;
-      document.getElementById("pantallaLogro").style.display = "flex";
-
-      // Vibración corta de recompensa (si el móvil lo permite)
-      if (navigator.vibrate) navigator.vibrate(120);
-    }
-
-    botonDescubrir.addEventListener("click", intentarDescubrir);
   </script>
 </body>
 </html>
