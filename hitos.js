@@ -79,8 +79,8 @@ const HITOS = [
     id: "ermita",
     nombre: "Ermita de Sarsa",
     emoji: "🔔",
-    lat: 42.566489,
-    lon: -0.552563,
+    lat: 42.566594,
+    lon: -0.552709,
     radio: 30,
     epoca: "Siglo XII",
     descripcion:
