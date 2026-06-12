@@ -186,6 +186,18 @@
     // ==========================================================
     const escena = document.querySelector("a-scene");
 
+    // Componente propio: hace que un elemento gire para mirar siempre a la
+    // cámara, así la etiqueta del hito se lee desde cualquier ángulo.
+    AFRAME.registerComponent("mirar-a-la-camara", {
+      init() { this.objetivo = new THREE.Vector3(); },
+      tick() {
+        const camara = this.el.sceneEl.camera;
+        if (!camara) return;
+        camara.getWorldPosition(this.objetivo);
+        this.el.object3D.lookAt(this.objetivo);
+      },
+    });
+
     function montarEscena() {
       // --- Cámara GPS ---
       const camara = document.createElement("a-camera");
@@ -213,7 +225,7 @@
 
       const gema = document.createElement("a-octahedron");
       gema.classList.add("clickable");
-      gema.setAttribute("radius", "5");
+      gema.setAttribute("radius", "2.5");
       gema.setAttribute("material", "color: #C9972B; metalness: 0.6; roughness: 0.3; emissive: #5e4408");
       gema.setAttribute("animation", "property: rotation; to: 0 360 0; dur: 7000; easing: linear; loop: true");
       gema.setAttribute("animation__flotar", "property: position; from: 0 -0.8 0; to: 0 0.8 0; dir: alternate; dur: 1600; easing: easeInOutSine; loop: true");
@@ -223,11 +235,11 @@
 
       const etiqueta = document.createElement("a-text");
       etiqueta.setAttribute("value", hito.nombre);
-      etiqueta.setAttribute("position", "0 9 0");
+      etiqueta.setAttribute("position", "0 4.5 0");
       etiqueta.setAttribute("align", "center");
-      etiqueta.setAttribute("width", "45");
+      etiqueta.setAttribute("width", "25");
       etiqueta.setAttribute("color", "#FFFFFF");
-      etiqueta.setAttribute("side", "double");
+      etiqueta.setAttribute("mirar-a-la-camara", "");
       ancla.appendChild(etiqueta);
 
       escena.appendChild(ancla);
@@ -257,6 +269,26 @@
     if (modoPrueba) {
       textoDistancia.textContent = "🧪 Modo prueba · mueve el móvil para encontrarlo";
       botonDescubrir.style.display = "block";
+    } else if ("geolocation" in navigator) {
+      // Lectura GPS propia, independiente de AR.js: la distancia y el botón
+      // funcionan aunque la librería de RA tarde en arrancar, y si algo
+      // falla se muestra el motivo exacto en pantalla.
+      navigator.geolocation.watchPosition(
+        (pos) => alActualizarPosicion(pos.coords.latitude, pos.coords.longitude),
+        (error) => {
+          if (error.code === 1) {
+            textoDistancia.textContent =
+              "⛔ Ubicación bloqueada: icono junto a la URL → Permisos → Ubicación → Permitir, y recarga";
+          } else if (error.code === 2) {
+            textoDistancia.textContent =
+              "📡 Sin señal GPS: muévete a una zona más abierta y espera";
+          } else {
+            textoDistancia.textContent =
+              "⏳ El GPS está tardando… espera quieto unos segundos";
+          }
+        },
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+      );
     }
 
     // ==========================================================
