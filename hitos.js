@@ -75,6 +75,20 @@ const HITOS = [
       "más antiguas de la ciudad y todavía sella la credencial a los " +
       "peregrinos del Camino.",
   },
+  {
+    id: "ermita",
+    nombre: "Ermita de Sarsa",
+    emoji: "🔔",
+    lat: 42.5664492,
+    lon: -0.5528539,
+    radio: 30,
+    epoca: "Siglo XII",
+    descripcion:
+      "Pequeña iglesia del románico rural construida a finales del siglo XII " +
+      "en Villar de Sarsa, una aldea de la Peña Oroel hoy desaparecida. En 1972 " +
+      "sus piedras se desmontaron y se volvieron a montar aquí, pieza a pieza, " +
+      "para salvarla de la ruina.",
+  },
 ];
 
 // ------------------------------------------------------------
