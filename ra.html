@@ -47,6 +47,29 @@
       display: none;
     }
 
+    /* ---------- Flecha guía hacia la figura ----------
+       El momento más confuso del juego es no saber hacia dónde
+       mirar. Cuando la figura queda fuera de pantalla, esta
+       píldora aparece en el borde indicando hacia dónde girar. */
+    .flecha {
+      position: fixed; top: 50%; z-index: 9;
+      transform: translateY(-50%);
+      display: none;
+      background: #d9a62e; color: #10151f;
+      font-weight: 700; font-size: 1rem;
+      padding: 12px 14px;
+      border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+      animation: latido 1.1s infinite;
+      pointer-events: none;
+    }
+    .flecha.izquierda { left: 10px; }
+    .flecha.derecha { right: 10px; }
+
+    @keyframes latido {
+      50% { transform: translateY(-50%) scale(1.12); }
+    }
+
     /* ---------- Botones inferiores ---------- */
     #acciones {
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
@@ -107,6 +130,9 @@
   <div id="prueba">🧪 Modo prueba: posición simulada junto al hito</div>
   <div id="aviso"></div>
 
+  <!-- Flecha que indica hacia dónde girar cuando la figura no está en pantalla -->
+  <div class="flecha" id="flechaGuia"></div>
+
   <a-scene
     vr-mode-ui="enabled: false"
     renderer="antialias: true; alpha: true"
@@ -164,6 +190,8 @@
       let distanciaActual = Infinity;
       let descubierto = cargarDescubiertos().includes(hito.id);
       let figura = null;
+      let ancla = null;                 // el ancla de la figura 3D; la flecha guía consulta su posición
+      let radarListo = modoPrueba;      // en modo prueba no esperamos al GPS real
 
       if (descubierto) boton.textContent = "📜 Ver ficha";
 
@@ -192,11 +220,12 @@
         // Cada vez que el GPS actualiza tu posición, recalculamos la distancia
         camara.addEventListener("gps-camera-update-position", function (evento) {
           const pos = evento.detail.position;
+          radarListo = true; // la cámara RA ya sabe dónde estás: la flecha puede funcionar
           alActualizarPosicion(pos.latitude, pos.longitude);
         });
 
         // --- Figura 3D del hito ---
-        const ancla = document.createElement("a-entity");
+        ancla = document.createElement("a-entity");
         ancla.setAttribute("gps-new-entity-place", "latitude: " + hito.lat + "; longitude: " + hito.lon);
 
         if (typeof crearModelo === "function") {
@@ -387,6 +416,49 @@
           }, 9000);
         }
       }
+
+      // ==========================================================
+      // 7. FLECHA GUÍA
+      //    Varias veces por segundo comprobamos si la figura cae
+      //    dentro del encuadre de la cámara. Si no, mostramos una
+      //    flecha en el borde que indica hacia dónde girar.
+      //    Solo actúa cuando la cámara RA ya conoce tu posición
+      //    (radarListo) y mientras el hito siga sin descubrir.
+      // ==========================================================
+      const flecha = document.getElementById("flechaGuia");
+      const posicionMundo = new THREE.Vector3();
+      const posicionRelativa = new THREE.Vector3();
+
+      setInterval(function () {
+        const camara3D = escena.camera; // la cámara interna de A-Frame
+        if (!radarListo || descubierto || !ancla || !camara3D) {
+          flecha.style.display = "none";
+          return;
+        }
+
+        // Posición de la figura vista "desde la cámara":
+        // x positivo = a tu derecha · z negativo = delante de ti
+        ancla.object3D.getWorldPosition(posicionMundo);
+        posicionRelativa.copy(posicionMundo).applyMatrix4(camara3D.matrixWorldInverse);
+
+        // ¿Está dentro del encuadre? (proyectamos a coordenadas de pantalla:
+        // el resultado va de -1 a 1, con el (0,0) en el centro de la pantalla)
+        let enPantalla = false;
+        if (posicionRelativa.z < 0) {
+          const proyectado = posicionMundo.clone().project(camara3D);
+          enPantalla = Math.abs(proyectado.x) <= 1 && Math.abs(proyectado.y) <= 1;
+        }
+
+        if (enPantalla) {
+          flecha.style.display = "none";
+        } else {
+          const haciaLaDerecha = posicionRelativa.x > 0;
+          flecha.textContent = haciaLaDerecha ? "Gira ❯" : "❮ Gira";
+          flecha.classList.toggle("derecha", haciaLaDerecha);
+          flecha.classList.toggle("izquierda", !haciaLaDerecha);
+          flecha.style.display = "block";
+        }
+      }, 200);
     }
   </script>
 </body>
