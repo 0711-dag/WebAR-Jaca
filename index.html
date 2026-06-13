@@ -138,6 +138,96 @@
       display: none;
     }
 
+    /* ---------- Pantalla de bienvenida ----------
+       Explica el juego y los dos permisos ANTES de pedirlos:
+       el GPS no se enciende hasta pulsar «Empezar a explorar».
+       El botón «?» de la cabecera la vuelve a abrir.          */
+    .bienvenida {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: rgba(43, 40, 35, 0.82);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .bienvenida-tarjeta {
+      width: 100%;
+      max-width: 430px;
+      max-height: 88vh;
+      overflow-y: auto;
+      background: #F5EFE3;
+      color: #2B2823;
+      border-radius: 16px;
+      border-top: 6px solid #C9972B;
+      padding: 22px 20px 18px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    }
+
+    .bienvenida-tarjeta h2 {
+      font-family: "Marcellus", serif;
+      font-weight: 400;
+      font-size: 1.5rem;
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+
+    .bienvenida-tarjeta h2 span { color: #C9972B; }
+
+    .bienvenida-intro {
+      font-size: 0.92rem;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .bienvenida-pasos {
+      list-style: none;
+      margin-bottom: 14px;
+    }
+
+    .bienvenida-pasos li {
+      font-size: 0.9rem;
+      line-height: 1.45;
+      margin-bottom: 8px;
+    }
+
+    .bienvenida-permisos {
+      background: rgba(201, 151, 43, 0.14);
+      border-left: 3px solid #C9972B;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .bienvenida-permisos p {
+      font-size: 0.85rem;
+      line-height: 1.45;
+      margin-bottom: 6px;
+    }
+
+    .bienvenida-permisos p:last-child { margin-bottom: 0; }
+
+    .bienvenida-nota {
+      color: #8A8174;
+      font-size: 0.78rem !important;
+    }
+
+    .boton-empezar {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: #2F5D50;
+      color: #F5EFE3;
+      font-size: 1.05rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .boton-empezar:active { background: #244a3f; }
+
     /* ---------- Tarjeta inferior ---------- */
     .tarjeta {
       position: relative;
@@ -204,11 +294,35 @@
   <header>
     <h1>JACA <span>RA</span></h1>
     <div class="progreso-texto" id="progresoTexto">0/5 hitos</div>
+    <button class="boton-reinicio" id="botonAyuda" title="¿Cómo se juega?">?</button>
     <button class="boton-reinicio" id="botonReinicio">Reiniciar</button>
   </header>
 
   <div class="ajedrezado"><div class="ajedrezado-relleno" id="barraProgreso"></div></div>
   <div class="aviso-prueba" id="avisoPrueba">🧪 Modo prueba: posición simulada junto a la Catedral</div>
+
+  <!-- Pantalla de bienvenida: se muestra ANTES de pedir ningún permiso -->
+  <div class="bienvenida" id="pantallaBienvenida">
+    <div class="bienvenida-tarjeta">
+      <h2>🏔️ JACA <span>RA</span></h2>
+      <p class="bienvenida-intro">
+        Una caza del tesoro por los monumentos de Jaca:
+        <strong>el mapa del juego es la ciudad de verdad</strong>.
+      </p>
+      <ol class="bienvenida-pasos">
+        <li>🥾 <strong>Camina</strong> hasta uno de los hitos marcados en el mapa.</li>
+        <li>👁️ A menos de ~30 m se activará el botón <strong>«Ver en RA»</strong>.</li>
+        <li>⭐ Busca con la cámara la <strong>figura dorada</strong> y tócala para descubrir el hito.</li>
+      </ol>
+      <div class="bienvenida-permisos">
+        <p>Para jugar, el navegador te pedirá dos permisos:</p>
+        <p>📍 <strong>Ubicación</strong> — para saber a qué hito te acercas. Elige «Precisa» y «Permitir».</p>
+        <p>📷 <strong>Cámara</strong> — solo en la vista RA, para dibujar la figura sobre la calle real.</p>
+        <p class="bienvenida-nota">Nada sale de tu móvil: el juego no envía ni guarda datos fuera de él.</p>
+      </div>
+      <button class="boton-empezar" id="botonEmpezar">¡Empezar a explorar!</button>
+    </div>
+  </div>
 
   <div id="mapa"></div>
 
@@ -333,18 +447,53 @@
         "Activa la ubicación del móvil y da permiso de «ubicación precisa» a Chrome. Luego recarga la página.";
     }
 
-    if (modoPrueba) {
-      // Posición fija simulada
-      alRecibirPosicion(POSICION_SIMULADA.lat, POSICION_SIMULADA.lon, 8);
-    } else if ("geolocation" in navigator) {
-      navigator.geolocation.watchPosition(
-        (pos) => alRecibirPosicion(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
-        alFallarGPS,
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 27000 }
-      );
-    } else {
-      alFallarGPS();
+    // El arranque del GPS vive ahora dentro de una función: así la
+    // pantalla de bienvenida decide CUÁNDO pedir el permiso.
+    let gpsIniciado = false;
+
+    function iniciarGPS() {
+      if (gpsIniciado) return; // que no se ponga en marcha dos veces
+      gpsIniciado = true;
+
+      if (modoPrueba) {
+        // Posición fija simulada
+        alRecibirPosicion(POSICION_SIMULADA.lat, POSICION_SIMULADA.lon, 8);
+      } else if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+          (pos) => alRecibirPosicion(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
+          alFallarGPS,
+          { enableHighAccuracy: true, maximumAge: 2000, timeout: 27000 }
+        );
+      } else {
+        alFallarGPS();
+      }
     }
+
+    // ==========================================================
+    // 5b. PANTALLA DE BIENVENIDA
+    // El permiso de ubicación NO salta al cargar la página, sino
+    // al pulsar «Empezar a explorar»: así el jugador entiende el
+    // porqué antes de que Chrome pregunte. Solo aparece la primera
+    // vez; el botón «?» de la cabecera la vuelve a abrir.
+    // ==========================================================
+    const pantallaBienvenida = document.getElementById("pantallaBienvenida");
+    const CLAVE_BIENVENIDA = "jaca-ra-bienvenida-vista";
+
+    if (localStorage.getItem(CLAVE_BIENVENIDA)) {
+      // Ya conoce el juego: directo al mapa
+      pantallaBienvenida.style.display = "none";
+      iniciarGPS();
+    }
+
+    document.getElementById("botonEmpezar").addEventListener("click", () => {
+      localStorage.setItem(CLAVE_BIENVENIDA, "si");
+      pantallaBienvenida.style.display = "none";
+      iniciarGPS(); // ahora sí: saltará la pregunta del permiso de ubicación
+    });
+
+    document.getElementById("botonAyuda").addEventListener("click", () => {
+      pantallaBienvenida.style.display = "flex";
+    });
 
     // ==========================================================
     // 6. TARJETA INFERIOR: hito pendiente más cercano
@@ -358,7 +507,7 @@
 
       // ¿Juego completado?
       if (pendientes.length === 0) {
-        titulo.textContent = "🏆 ¡Has descubierto los 5 hitos de Jaca!";
+        titulo.textContent = `🏆 ¡Has descubierto los ${HITOS.length} hitos de Jaca!`;
         detalle.textContent = "Pulsa «Reiniciar» arriba para volver a jugar.";
         botonRA.style.display = "none";
         return;
